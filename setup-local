@@ -195,41 +195,41 @@ kubectl create secret generic api-client-secret \
   --from-literal="CLIENT_SECRET=${api_client_secret}"
 
 # Deploy the API service.
-docker build example-api-python3-flask --file example-api-python3-flask/Dockerfile --tag example-api
+docker build api --file api/Dockerfile --tag api
 kubectl apply -f - << EOF
 apiVersion: v1
 kind: Service
 metadata:
-  name: example-api
+  name: api
   labels:
-    app: example-api
+    app: api
 spec:
   ports:
     - port: 80
       targetPort: 8000
   selector:
-    app: example-api
+    app: api
   type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: example-api
+  name: api
   labels:
-    app: example-api
+    app: api
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: example-api
+      app: api
   template:
     metadata:
       labels:
-        app: example-api
+        app: api
     spec:
       containers:
-        - name: example-api
-          image: example-api
+        - name: api
+          image: api
           imagePullPolicy: Never
           env:
             - name: ZITADEL_DOMAIN
@@ -273,7 +273,7 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: example-api
+  name: api
   namespace: default
 spec:
   entryPoints:
@@ -282,7 +282,7 @@ spec:
     - match: Host(\`${api_address}\`)
       kind: Rule
       services:
-        - name: example-api
+        - name: api
           port: 80
   tls:
     secretName: api-certificate-secret
