@@ -31,15 +31,38 @@ resource "zitadel_project" "default" {
   org_id = zitadel_org.default.id
 }
 
-resource "zitadel_application_oidc" "default" {
-  org_id                    = zitadel_org.default.id
-  project_id                = zitadel_project.default.id
-  name                      = "terraform-test-application"
-  redirect_uris             = ["https://${var.redirect_address}/login-redirect"]
-  post_logout_redirect_uris = ["https://${var.redirect_address}/logout"]
-  app_type                  = "OIDC_APP_TYPE_WEB"
-  auth_method_type          = "OIDC_AUTH_METHOD_TYPE_NONE"
-  access_token_type         = "OIDC_TOKEN_TYPE_BEARER"
-  response_types            = ["OIDC_RESPONSE_TYPE_CODE"]
-  grant_types               = ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE"]
+resource "zitadel_application_api" "default" {
+  org_id           = zitadel_org.default.id
+  project_id       = zitadel_project.default.id
+  name             = "terraform-test-api"
+  auth_method_type = "API_AUTH_METHOD_TYPE_BASIC"
+}
+
+resource "zitadel_machine_user" "default" {
+  org_id      = zitadel_org.default.id
+  user_name   = "api.user@example.tld"
+  name        = "API User"
+  description = "Terraform Test API User"
+  with_secret = false
+}
+
+resource "zitadel_personal_access_token" "default" {
+  org_id          = zitadel_org.default.id
+  user_id         = zitadel_machine_user.default.id
+  expiration_date = "2026-01-01T00:40:00Z"
+}
+
+output "api_client_id" {
+  value = zitadel_application_api.default.client_id
+  sensitive = true
+}
+
+output "api_client_secret" {
+  value = zitadel_application_api.default.client_secret
+  sensitive = true
+}
+
+output "api_token" {
+  value = zitadel_personal_access_token.default.token
+  sensitive = true
 }

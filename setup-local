@@ -40,6 +40,13 @@ sudo brew services restart unbound
 sudo dscacheutil -flushcache
 sudo killall -HUP mDNSResponder
 
+# Make sure coredns is using the DNS server on the host.
+# Note: Nothing that resolves as 127.0.0.1 will be reachable from the cluster.
+dns_server="$(colima ssh -- ip --json route get 1.1.1.1 | jq --raw-output '.[0].gateway')"
+kubectl get configmap coredns --namespace kube-system -o yaml |
+  sed "s|/etc/resolv.conf|${dns_server}|" | kubectl apply -f -
+kubectl rollout restart deployment coredns --namespace kube-system
+
 # Set up cert-manager and create a certificate issuer using the already-trusted root certificate on
 # the system.
 helm repo add jetstack https://charts.jetstack.io --force-update
@@ -175,10 +182,126 @@ EOF
 tofu init
 tofu apply -auto-approve
 
+# Extract the client configuration.
+api_address="api.${base_address}"
+api_client_id="$(tofu output -json | jq --raw-output .api_client_id.value)"
+api_client_secret="$(tofu output -json | jq --raw-output .api_client_secret.value)"
+api_token="$(tofu output -json | jq --raw-output .api_token.value)"
+
+kubectl create secret generic root-ca-secret \
+  --from-file="root.pem=${HOME}/.local/share/ca/root.pem"
+kubectl create secret generic api-client-secret \
+  --from-literal="CLIENT_ID=${api_client_id}" \
+  --from-literal="CLIENT_SECRET=${api_client_secret}"
+
+# Deploy the API service.
+docker build example-api-python3-flask --file example-api-python3-flask/Dockerfile --tag example-api
+kubectl apply -f - << EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-api
+  labels:
+    app: example-api
+spec:
+  ports:
+    - port: 80
+      targetPort: 8000
+  selector:
+    app: example-api
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-api
+  labels:
+    app: example-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: example-api
+  template:
+    metadata:
+      labels:
+        app: example-api
+    spec:
+      containers:
+        - name: example-api
+          image: example-api
+          imagePullPolicy: Never
+          env:
+            - name: ZITADEL_DOMAIN
+              value: https://${zitadel_address}
+            - name: REQUESTS_CA_BUNDLE
+              value: /ca/root.pem
+            - name: CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: api-client-secret
+                  key: CLIENT_ID
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: api-client-secret
+                  key: CLIENT_SECRET
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: root-ca-volume
+              mountPath: /ca
+              readOnly: true
+      volumes:
+        - name: root-ca-volume
+          secret:
+            secretName: root-ca-secret
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: api-certificate
+spec:
+  secretName: api-certificate-secret
+  dnsNames:
+    - ${api_address}
+  issuerRef:
+    name: ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: example-api
+  namespace: default
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(\`${api_address}\`)
+      kind: Rule
+      services:
+        - name: example-api
+          port: 80
+  tls:
+    secretName: api-certificate-secret
+EOF
+
+# Ensure the API server's public endpoint can be hit without a token, and the private endpoint can
+# be hit with a token.
+until curl --fail https://api.example.tld/api/public; do
+  echo "Waiting for API..."
+  sleep 2
+done
+curl --fail https://api.example.tld/api/private --header "Authorization: Bearer ${api_token}"
+
 # Show the local URLs that can be used to connect to the services.
 echo
 echo "Zitadel: https://${zitadel_address}"
 echo "  Username: zitadel-admin@zitadel.${zitadel_address}"
 echo "  Password: Password1!"
 echo "MailHog: https://${mailhog_address}"
+echo "API: https://${api_address}"
+echo "  Token: ${api_token}"
 echo
