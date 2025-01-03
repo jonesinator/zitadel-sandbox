@@ -172,12 +172,14 @@ spec:
     secretName: id-certificate-secret
 EOF
 
+app_address="app.${base_address}"
+
 # Configure Zitadel using OpenTofu.
 kubectl -n default get secret zitadel-admin-sa -o jsonpath='{ .data.zitadel-admin-sa\.json }' |
   base64 -D > zitadel-admin-sa.json
 cat << EOF >> zitadel.auto.tfvars
 zitadel_address = "${zitadel_address}"
-redirect_address = "app.${base_address}"
+redirect_address = "${app_address}"
 EOF
 tofu init
 tofu apply -auto-approve
@@ -296,6 +298,77 @@ until curl --fail https://api.example.tld/api/public; do
 done
 curl --fail https://api.example.tld/api/private --header "Authorization: Bearer ${api_token}"
 
+# Deploy the frontend service.
+docker build web --file web/Dockerfile --tag web
+kubectl apply -f - << EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+  selector:
+    app: web
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: web
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: web-certificate
+spec:
+  secretName: web-certificate-secret
+  dnsNames:
+    - ${app_address}
+  issuerRef:
+    name: ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: web
+  namespace: default
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(\`${app_address}\`)
+      kind: Rule
+      services:
+        - name: web
+          port: 80
+  tls:
+    secretName: web-certificate-secret
+EOF
+
 # Show the local URLs that can be used to connect to the services.
 echo
 echo "Zitadel: https://${zitadel_address}"
@@ -304,4 +377,5 @@ echo "  Password: Password1!"
 echo "MailHog: https://${mailhog_address}"
 echo "API: https://${api_address}"
 echo "  Token: ${api_token}"
+echo "Web: https://${app_address}"
 echo
