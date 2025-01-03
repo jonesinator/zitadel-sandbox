@@ -173,13 +173,14 @@ spec:
 EOF
 
 app_address="app.${base_address}"
+app_redirect_address="https://${app_address}/login-callback"
 
 # Configure Zitadel using OpenTofu.
 kubectl -n default get secret zitadel-admin-sa -o jsonpath='{ .data.zitadel-admin-sa\.json }' |
   base64 -D > zitadel-admin-sa.json
 cat << EOF >> zitadel.auto.tfvars
 zitadel_address = "${zitadel_address}"
-redirect_address = "${app_address}"
+redirect_address = "${app_redirect_address}"
 EOF
 tofu init
 tofu apply -auto-approve
@@ -189,6 +190,7 @@ api_address="api.${base_address}"
 api_client_id="$(tofu output -json | jq --raw-output .api_client_id.value)"
 api_client_secret="$(tofu output -json | jq --raw-output .api_client_secret.value)"
 api_token="$(tofu output -json | jq --raw-output .api_token.value)"
+web_client_id="$(tofu output -json | jq --raw-output .web_client_id.value)"
 
 kubectl create secret generic root-ca-secret \
   --from-file="root.pem=${HOME}/.local/share/ca/root.pem"
@@ -292,14 +294,17 @@ EOF
 
 # Ensure the API server's public endpoint can be hit without a token, and the private endpoint can
 # be hit with a token.
-until curl --fail https://api.example.tld/api/public; do
+until curl --fail https://${api_address}/api/public; do
   echo "Waiting for API..."
   sleep 2
 done
-curl --fail https://api.example.tld/api/private --header "Authorization: Bearer ${api_token}"
+curl --fail https://${api_address}/api/private --header "Authorization: Bearer ${api_token}"
 
 # Deploy the frontend service.
-docker build web --file web/Dockerfile --tag web
+docker build web --file web/Dockerfile --tag web \
+  --build-arg "VITE_AUTH_URL=https://${zitadel_address}" \
+  --build-arg "VITE_AUTH_CLIENT_ID=${web_client_id}" \
+  --build-arg "VITE_AUTH_REDIRECT_URI=${app_redirect_address}"
 kubectl apply -f - << EOF
 apiVersion: v1
 kind: Service

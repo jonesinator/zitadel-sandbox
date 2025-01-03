@@ -42,7 +42,7 @@ resource "zitadel_application_oidc" "default" {
   org_id            = zitadel_org.default.id
   project_id        = zitadel_project.default.id
   name              = "terraform-test-web"
-  redirect_uris     = ["https://app.example.tld/login-callback"]
+  redirect_uris     = [var.redirect_address]
   response_types    = ["OIDC_RESPONSE_TYPE_CODE"]
   grant_types       = ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE"]
   app_type          = "OIDC_APP_TYPE_USER_AGENT"
@@ -53,7 +53,7 @@ resource "zitadel_application_oidc" "default" {
 
 resource "zitadel_machine_user" "default" {
   org_id      = zitadel_org.default.id
-  user_name   = "api.user@example.tld"
+  user_name   = "api.user@example.com"
   name        = "API User"
   description = "Terraform Test API User"
   with_secret = false
