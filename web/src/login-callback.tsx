@@ -16,6 +16,7 @@ const Callback = ({
   handleLogout,
 }: Props) => {
   const [userInfo, setUserInfo] = useState<User | null>(null);
+  const [apiResponse, setApiResponse] = useState<string | null>(null);
 
   useEffect(() => {
     if (authenticated === null) {
@@ -27,6 +28,7 @@ const Callback = ({
             setUserInfo(user);
           } else {
             setAuth(false);
+            setApiResponse("Processed callback, but no user?");
           }
         })
         .catch(() => {
@@ -42,30 +44,40 @@ const Callback = ({
             setUserInfo(user);
           } else {
             setAuth(false);
+            setApiResponse("No user?");
           }
         })
         .catch(() => {
           setAuth(false);
+          setApiResponse("Error getting user?");
         });
     }
-  }, [authenticated, userManager, setAuth]);
-  if (authenticated === true && userInfo) {
-    return (
-      <div className="user">
-        <h2>Welcome, {userInfo.profile.name}!</h2>
-        <p className="description">Your ZITADEL Profile Information</p>
-        <p>Name: {userInfo.profile.name}</p>
-        <p>Email: {userInfo.profile.email}</p>
-        <p>Email Verified: {userInfo.profile.email_verified ? "Yes" : "No"}</p>
-        <p>
-          Roles:{" "}
-          {JSON.stringify(
-            userInfo.profile[
-              "urn:zitadel:iam:org:project:roles"
-            ]
-          )}
-        </p>
+    if (authenticated === true && userInfo && apiResponse === null) {
+      fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/private`,
+        { headers: { Authorization: `Bearer ${userInfo.access_token}` } },
+      ).then((response) => {
+          if (response.ok) {
+            response.json().then((json_response) => {
+              if ("message" in json_response && typeof json_response["message"] === "string") {
+                setApiResponse(json_response["message"]);
+              } else {
+                setApiResponse("Good response with no message.");
+              }
+            })
+          } else {
+              setApiResponse("Bad response " + response.status);
+          }
+        })
+    }
+  }, [authenticated, userManager, setAuth, setApiResponse]);
 
+  if (authenticated === true && apiResponse) {
+    return (
+      <div>
+        <p>Name: {userInfo?.profile.name}</p>
+        <p>Email: {userInfo?.profile.email}</p>
+        <p>API Response: {apiResponse}</p>
         <button onClick={handleLogout}>Log out</button>
       </div>
     );

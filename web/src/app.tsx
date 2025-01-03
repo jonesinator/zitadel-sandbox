@@ -24,9 +24,7 @@ export default function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Sup?</h1>
-        <p>Welcome to ZITADEL React</p>
-
+        <h1>Hello!</h1>
         <BrowserRouter>
           <Routes>
             <Route

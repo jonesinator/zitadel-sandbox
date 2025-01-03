@@ -2,6 +2,7 @@ FROM docker.io/library/node:23 as build
 ARG VITE_AUTH_URL
 ARG VITE_AUTH_CLIENT_ID
 ARG VITE_AUTH_REDIRECT_URI
+ARG VITE_API_BASE_URL
 RUN useradd --user-group --create-home --home-dir /build --shell /bin/false builder
 USER builder
 WORKDIR /build

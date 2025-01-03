@@ -43,6 +43,10 @@ sudo killall -HUP mDNSResponder
 # Make sure coredns is using the DNS server on the host.
 # Note: Nothing that resolves as 127.0.0.1 will be reachable from the cluster.
 dns_server="$(colima ssh -- ip --json route get 1.1.1.1 | jq --raw-output '.[0].gateway')"
+until kubectl get configmap coredns --namespace kube-system &> /dev/null; do
+  echo "Waiting for coredns configmap..."
+  sleep 1
+done
 kubectl get configmap coredns --namespace kube-system -o yaml |
   sed "s|/etc/resolv.conf|${dns_server}|" | kubectl apply -f -
 kubectl rollout restart deployment coredns --namespace kube-system
@@ -304,7 +308,8 @@ curl --fail https://${api_address}/api/private --header "Authorization: Bearer $
 docker build web --file web/Dockerfile --tag web \
   --build-arg "VITE_AUTH_URL=https://${zitadel_address}" \
   --build-arg "VITE_AUTH_CLIENT_ID=${web_client_id}" \
-  --build-arg "VITE_AUTH_REDIRECT_URI=${app_redirect_address}"
+  --build-arg "VITE_AUTH_REDIRECT_URI=${app_redirect_address}" \
+  --build-arg "VITE_API_BASE_URL=https://${api_address}"
 kubectl apply -f - << EOF
 apiVersion: v1
 kind: Service

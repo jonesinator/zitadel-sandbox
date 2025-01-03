@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, Response
+from flask_cors import CORS
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from validator import ZitadelIntrospectTokenValidator, ValidatorError
 
@@ -6,6 +7,7 @@ require_auth = ResourceProtector()
 require_auth.register_token_validator(ZitadelIntrospectTokenValidator())
 
 app = Flask(__name__)
+cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 @app.errorhandler(ValidatorError)
 def handle_auth_error(ex: ValidatorError) -> Response:
@@ -28,4 +30,4 @@ def private_scoped():
     return jsonify(message="private-scoped")
 
 if __name__ == "__main__":
-    APP.run()
+    app.run()
