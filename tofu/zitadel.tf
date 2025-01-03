@@ -22,6 +22,16 @@ provider "zitadel" {
   jwt_profile_file = "zitadel-admin-sa.json"
 }
 
+resource "zitadel_smtp_config" "default" {
+  sender_address   = "sender@id.example.tld"
+  sender_name      = "BillyBob"
+  host             = "mailhog.default.svc.cluster.local:1025"
+  reply_to_address = "replyto@id.example.tld"
+  set_active       = true
+  user             = "none"
+  password         = "none"
+}
+
 resource "zitadel_org" "default" {
   name = "terraform-test-organiztion"
 }

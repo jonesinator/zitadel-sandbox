@@ -14,7 +14,7 @@ set -euo pipefail
 : "${base_address:=example.tld}"
 
 # Remove any existing data.
-rm -rf zitadel-admin-sa.json terraform.tfstate* .terraform ./zitadel.auto.tfvars
+rm -rf tofu/zitadel-admin-sa.json tofu/terraform.tfstate* tofu/.terraform tofu/./zitadel.auto.tfvars
 colima delete --force --profile "${colima_profile}" || true
 
 # Set up a new instance of colima with Kubernetes including Traefik ingress.
