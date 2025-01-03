@@ -176,10 +176,12 @@ spec:
     secretName: id-certificate-secret
 EOF
 
+api_address="api.${base_address}"
 app_address="app.${base_address}"
 app_redirect_address="https://${app_address}/login-callback"
 
 # Configure Zitadel using OpenTofu.
+pushd tofu
 kubectl -n default get secret zitadel-admin-sa -o jsonpath='{ .data.zitadel-admin-sa\.json }' |
   base64 -D > zitadel-admin-sa.json
 cat << EOF >> zitadel.auto.tfvars
@@ -188,13 +190,11 @@ redirect_address = "${app_redirect_address}"
 EOF
 tofu init
 tofu apply -auto-approve
-
-# Extract the client configuration.
-api_address="api.${base_address}"
 api_client_id="$(tofu output -json | jq --raw-output .api_client_id.value)"
 api_client_secret="$(tofu output -json | jq --raw-output .api_client_secret.value)"
 api_token="$(tofu output -json | jq --raw-output .api_token.value)"
 web_client_id="$(tofu output -json | jq --raw-output .web_client_id.value)"
+popd
 
 kubectl create secret generic root-ca-secret \
   --from-file="root.pem=${HOME}/.local/share/ca/root.pem"
